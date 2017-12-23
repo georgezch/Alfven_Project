@@ -6,6 +6,8 @@
 from mpi4py import MPI as mpi
 import numpy as np 
 import numpy.random as rnd
+import h5py
+import os
 from time import time
 ##------------------------------------------------------------##
 
@@ -234,6 +236,11 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
             vt  = np.empty(shape=(nsteps/nsample+2,)+np.shape(x))
             Ekt = np.empty(shape=(nsteps/nsample+2,)+(Np,))
     """
+    # parallelise integration by splitting particles into groups
+    comm = mpi.COMM_WORLD
+    mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size()
+
+
     # initializations
     tt  = np.empty(nsteps/nsample+2)
     xt  = np.empty(shape=(nsteps/nsample+2,)+np.shape(x))
@@ -242,10 +249,16 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
     
     isample, t = 0, 0.
     tt[0], xt[0], vt[0], Ekt[0] = t, x, v, E
-    
-    # parallelise integration by splitting particles into groups
-    comm = mpi.COMM_WORLD
-    mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size()
+
+    if mpi_rank==0:
+        # save initial data
+        x_h5f    = h5py.File(dir_x+'/x%d.h5'%(0)      , 'w')
+        v_h5f    = h5py.File(dir_v+'/v%d.h5'%(0)      , 'w')
+        Ekin_h5f = h5py.File(dir_Ekin+'/Ekin%d.h5'%(0), 'w')
+        x_h5f.create_dataset('data', data=xt[0])
+        v_h5f.create_dataset('data', data=vt[0])
+        Ekin_h5f.create_dataset('data', data=Ekt[0])
+        x_h5f.close(); v_h5f.close(); Ekin_h5f.close()
     
     # split particles in groups, so that each processor can work with a separate bunch of them
     # ... i.e. define a "local" group of particles for each processor
@@ -272,6 +285,15 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
                 xt[isample]  = np.copy(x)
                 vt[isample]  = np.copy(v)
                 Ekt[isample] = np.copy(Ekin(v))
+
+                # save data
+                x_h5f    = h5py.File(dir_x+'/x%d.h5'%(isample)      , 'w')
+                v_h5f    = h5py.File(dir_v+'/v%d.h5'%(isample)      , 'w')
+                Ekin_h5f = h5py.File(dir_Ekin+'/Ekin%d.h5'%(isample), 'w')
+                x_h5f.create_dataset('data', data=xt[isample])
+                v_h5f.create_dataset('data', data=vt[isample])
+                Ekin_h5f.create_dataset('data', data=Ekt[isample])
+                x_h5f.close(); v_h5f.close(); Ekin_h5f.close()
             
     return tt, xt, vt, Ekt
 
@@ -324,6 +346,22 @@ comm = mpi.COMM_WORLD
 # name of each processor (mpi_rank) and total number of them (mpi_size)
 mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size() 
 
+"""Initialize save files"""
+if mpi_rank==0:
+    dir_output = '/home/georgez/ownCloud/Projects/Alfven/Alfven_py/output'
+    dir_x      = dir_output+'/x'
+    dir_v      = dir_output+'/v'
+    dir_Ekin   = dir_output+'/Ekin'
+
+    if not os.path.exists(dir_output):
+        os.makedirs(dir_output)
+    if not os.path.exists(dir_x):
+        os.makedirs(dir_x)
+    if not os.path.exists(dir_v):
+        os.makedirs(dir_v)
+    if not os.path.exists(dir_Ekin):
+        os.makedirs(dir_Ekin)
+
 """Initialize particles"""
 Np = 5                                         # number of the Np particles
 x_init, v_init, Ekin_init = particle_init(Np)  # intital positions, velocities, and energies 
@@ -342,6 +380,4 @@ t2 = time() # end clock time
 
 if mpi_rank==0:
     print("integrated %d particles in %.2f seconds"%(Np,t2-t1))
-    # save data to file
-    np.savez('out_file', tout=tout, xout=xout, vout=vout, Eout=Eout)
-    print('data saved to file "data_out" successfully')
+    print('data saved to file "output" successfully')
