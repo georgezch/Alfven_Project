@@ -341,7 +341,7 @@ tout, xout, vout, Eout = particle_integration(Np, nsteps, nsample, nprint, dt, x
 t2 = time() # end clock time
 
 if mpi_rank==0:
-    print("integrated in %.2f seconds"%(t2-t1))
+    print("integrated %d particles in %.2f seconds"%(Np,t2-t1))
     # save data to file
     np.savez('out_file', tout=tout, xout=xout, vout=vout, Eout=Eout)
     print('data saved to file "data_out" successfully')
