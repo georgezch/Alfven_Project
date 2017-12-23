@@ -355,11 +355,8 @@ if mpi_rank==0:
 
     if not os.path.exists(dir_output):
         os.makedirs(dir_output)
-    if not os.path.exists(dir_x):
         os.makedirs(dir_x)
-    if not os.path.exists(dir_v):
         os.makedirs(dir_v)
-    if not os.path.exists(dir_Ekin):
         os.makedirs(dir_Ekin)
 
 """Initialize particles"""
