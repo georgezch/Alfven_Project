@@ -113,7 +113,7 @@ def Ekin(v):
 
 def compute_deltaB_deltaE(x, t):
     """
-    Computes delta_B and delta_E at the same time at (x,t)
+    Computes delta_B and delta_E at (x,y,z,t)
     
     input
     -----
@@ -145,7 +145,17 @@ def compute_deltaB_deltaE(x, t):
     return deltaB, deltaE
 
 def compute_acc(x, v, t):
-    """Acceleration at position x and time t"""
+    """
+    Acceleration at position (x,y,z) at time t
+    
+    input
+    -----
+    x, v: numpy vectors
+        positions, and velocities
+    t: float
+        time moment
+    """
+    
     # magnetic and electric fields at (x,y,z,t)
     deltaB, deltaE = compute_deltaB_deltaE(x, t)
     
@@ -170,27 +180,27 @@ def DKD_step(x, v, t, dt):
     -----
     x, v: numpy vectors
         positions, and velocities
-    dt: floats
+    dt: float
         time step size
     
     output
     ------
     x, v: numpy arrays
-        updated positions and velocities after one time step
+        updated positions and velocities after one full time step
     """
     # half time-step for Euler step
     dth = 0.5*dt
-        
-    # position at t_{i+1/2} + dt/2 (1st-order Euler scheme)
+    
+    # position x_{i+1/2} at time t_{i+1/2} + dt/2 (1st-order Euler scheme)
     x += v*dth
     
-    # acceleration at position above
+    # acceleration at position x_{i+1/2}
     acc = compute_acc(x, v, t+dth)
     
     # new velocity using updated position and acceleration
     v += acc*dt
     
-    # full position update at t_{i+1} = t_i + dt = t_{i+1/2} + dt/2
+    # full position update at t_{i+1} = t_{i+1/2} + dt/2 = t_i + dt
     x += v*dth
     
     return x, v
@@ -221,27 +231,17 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
     Ekin: python function 
         function to compute kinetic energy
     acc: python function
-        function to compute acceleration of particles
-        
-    output
-    ------
-    tt: numpy vector
-        recorded trajectory times
-    xt, vt, Ekt: numpy vectors
-        coordinates, velocities, and kinetic energies     
-    
-        these arrays are initialized as follows: 
-            tt  = np.empty(nsteps/nsample+2)
-            xt  = np.empty(shape=(nsteps/nsample+2,)+np.shape(x))
-            vt  = np.empty(shape=(nsteps/nsample+2,)+np.shape(x))
-            Ekt = np.empty(shape=(nsteps/nsample+2,)+(Np,))
+        function to compute acceleration of particles   
     """
     # parallelise integration by splitting particles into groups
+    # ... first setup MPI environment
     comm = mpi.COMM_WORLD
     comm.Barrier()
     mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size()
 
-    # initializations
+    # initializations of basic arrays
+    # ... tt: time moments
+    # ... xt, vt, Ekt: positions, velocities, and kinetic energies over time
     tt  = np.empty(nsteps/nsample+2)
     xt  = np.empty(shape=(nsteps/nsample+2,)+np.shape(x))
     vt  = np.empty(shape=(nsteps/nsample+2,)+np.shape(x))
@@ -252,13 +252,19 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
 
     if mpi_rank==0:
         # save initial data
+        # note: to maintain the correct time order in the output file
+        #       we add zeros at the beginning and ending of each file
+        #       and make sure that every file's name has the same length
         rep = '0'*len(str(nsteps/nsample+2))
+        # open files
         x_h5f    = h5py.File(dir_x+'/x0%s0.h5'%(rep)      , 'w')
         v_h5f    = h5py.File(dir_v+'/v0%s0.h5'%(rep)      , 'w')
         Ekin_h5f = h5py.File(dir_Ekin+'/Ekin0%s0.h5'%(rep), 'w')
+        # same files
         x_h5f.create_dataset('data', data=xt[0])
         v_h5f.create_dataset('data', data=vt[0])
         Ekin_h5f.create_dataset('data', data=Ekt[0])
+        # close files
         x_h5f.close(); v_h5f.close(); Ekin_h5f.close()
     
     # split particles in groups, so that each processor can work with a separate bunch of them
@@ -283,7 +289,7 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
                 x, v = np.concatenate(all_x), np.concatenate(all_v)
                 isample += 1
 
-                # save data
+                # save data (as before, see notes above)
                 rep = '0'*(len(str(nsteps/nsample+2))-len(str(isample)))
                 x_h5f    = h5py.File(dir_x+'/x0%s%d0.h5'%(rep,isample)      , 'w')
                 v_h5f    = h5py.File(dir_v+'/v0%s%d0.h5'%(rep,isample)      , 'w')
@@ -298,8 +304,8 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
 def particle_init(Np):
     """
     Initialize positions and velocities
-        Positions are uniformly distributed
-        Velocities are distributed normaly
+    ... Positions are uniformly distributed inside specifies space
+    ... Velocities are initialized with normal distributions
     
     input
     -----
@@ -308,23 +314,23 @@ def particle_init(Np):
     
     output
     ------
-    x_init, v_init: numpy arrays
-        initial positions and velocities -> arrays of coordinates: (x,y,z) or (vx,vy,vz)
-    Ekin_init: numpy array
-        initial kinetic energies
+    x_init, v_init, Ekin_init: numpy arrays
+        initial positions, velocities (arrays of coordinates (x,y,z), and (vx,vy,vz)), and kinetic energies
     """
     
     # parameters
+    # ... specify initial spatial limits
     xmin, ymin, zmin = 0., 0., 0.
     xmax, ymax, zmax = 100., 100., 100.
+    # insert mu and sigma for normal distributions
     mu_v = 0.; sigma_v = vth/vA
     
-    # positions: uniform distribution
+    # positions: uniform distributions
     x_init = rnd.uniform(xmin, xmax, Np)
     y_init = rnd.uniform(ymin, ymax, Np)
     z_init = rnd.uniform(zmin, zmax, Np)
 
-    # velocities: normal distribution
+    # velocities: normal distributions
     vx_init = rnd.normal(mu_v, sigma_v, Np)
     vy_init = rnd.normal(mu_v, sigma_v, Np)
     vz_init = rnd.normal(mu_v, sigma_v, Np)
@@ -332,24 +338,31 @@ def particle_init(Np):
     # pack-up initial conditions
     x_init = np.array(zip(x_init,y_init,z_init))
     v_init = np.array(zip(vx_init,vy_init,vz_init))
-    
-    # initial energies
     Ekin_init = Ekin(v_init)
     
     return x_init, v_init, Ekin_init
 ##------------------------------------------------------------##
 
-# initialize MPI for parallel integration
+"""................
+....Integration....
+................"""
+
+# initialize MPI environment for parallel integration
+# communicator
 comm = mpi.COMM_WORLD
-# name of each processor (mpi_rank) and total number of them (mpi_size)
+# name processors, and total number of them
 mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size() 
 
 """Initialize save files"""
+# output directory
 dir_output = '/home/georgez/ownCloud/Projects/Alfven/Alfven_py/output'
+# folders containing positions, velocities, and energies
+# note: each time moment is a separate .hdf5 file
 dir_x      = dir_output+'/x'
 dir_v      = dir_output+'/v'
 dir_Ekin   = dir_output+'/Ekin'
 
+# make sure the folders exist, or create them otherwise
 if mpi_rank==0:
     if not os.path.exists(dir_output):
         os.makedirs(dir_output)
@@ -358,11 +371,11 @@ if mpi_rank==0:
         os.makedirs(dir_Ekin)
 
 """Integration parameters"""
-Np = 5                        # number of the Np particles
-t = 0.; dt = 5.e-4            # start time and time step in cose units
+Np = 5                        # number of particles
+t = 0.; dt = 5.e-4            # start time, and time step in code units
 tmax = 1.e6 * dt              # end time in code units
 nsteps = np.int(tmax/dt)-1    # number of time steps
-nsample = 100; nprint = 1e5   # dump results every nsample and print every nprint
+nsample = 100; nprint = 1e5   # dump results every nsample, and print every nprint
 
 """Initialize particles"""
 x_init, v_init, Ekin_init = particle_init(Np)  # intital positions, velocities, and energies 
