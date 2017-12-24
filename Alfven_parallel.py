@@ -282,22 +282,18 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
             if mpi_rank==0:
                 x, v = np.concatenate(all_x), np.concatenate(all_v)
                 isample += 1
-                tt[isample]  = np.copy(t)
-                xt[isample]  = np.copy(x)
-                vt[isample]  = np.copy(v)
-                Ekt[isample] = np.copy(Ekin(v))
 
                 # save data
                 rep = '0'*(len(str(nsteps/nsample+2))-len(str(isample)))
                 x_h5f    = h5py.File(dir_x+'/x0%s%d0.h5'%(rep,isample)      , 'w')
                 v_h5f    = h5py.File(dir_v+'/v0%s%d0.h5'%(rep,isample)      , 'w')
                 Ekin_h5f = h5py.File(dir_Ekin+'/Ekin0%s%d0.h5'%(rep,isample), 'w')
-                x_h5f.create_dataset('data', data=xt[isample])
-                v_h5f.create_dataset('data', data=vt[isample])
-                Ekin_h5f.create_dataset('data', data=Ekt[isample])
+                x_h5f.create_dataset('data', data=np.copy(x))
+                v_h5f.create_dataset('data', data=np.copy(v))
+                Ekin_h5f.create_dataset('data', data=np.copy(Ekin(v)))
                 x_h5f.close(); v_h5f.close(); Ekin_h5f.close()
             
-    return tt, xt, vt, Ekt
+    return
 
 def particle_init(Np):
     """
@@ -373,11 +369,11 @@ x_init, v_init, Ekin_init = particle_init(Np)  # intital positions, velocities, 
 
 """Integrate equations of motion"""
 t1 = time() # start clock time
-###----------------------------------------------- Call solver ---------------------------------------###
-tout, xout, vout, Eout = particle_integration(Np, nsteps, nsample, nprint, dt, x_init, v_init, Ekin_init)
-###---------------------------------------------------------------------------------------------------###
+###--------------------------- Call solver ----------------------------------###
+particle_integration(Np, nsteps, nsample, nprint, dt, x_init, v_init, Ekin_init)
+###--------------------------------------------------------------------------###
 t2 = time() # end clock time
 
 if mpi_rank==0:
     print("integrated %d particles in %.2f seconds"%(Np,t2-t1))
-    print('data saved to file "output" successfully')
+    print('data saved in folder "output"')
