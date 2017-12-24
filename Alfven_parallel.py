@@ -359,7 +359,7 @@ if mpi_rank==0:
 
 """Integration parameters"""
 Np = 5                        # number of the Np particles
-t = 0.; dt = 5.e-4;           # start time and time step in cose units
+t = 0.; dt = 5.e-4            # start time and time step in cose units
 tmax = 1.e6 * dt              # end time in code units
 nsteps = np.int(tmax/dt)-1    # number of time steps
 nsample = 100; nprint = 1e5   # dump results every nsample and print every nprint
