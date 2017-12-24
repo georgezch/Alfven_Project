@@ -4,11 +4,11 @@
 
 """Preliminary Setup"""
 from mpi4py import MPI as mpi
-import numpy as np 
 import numpy.random as rnd
+from time import time
+import numpy as np 
 import h5py
 import os
-from time import time
 ##------------------------------------------------------------##
 
 """Basic definitions"""
