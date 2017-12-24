@@ -357,7 +357,7 @@ mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size()
 # output directory
 dir_output = '/home/georgez/ownCloud/Projects/Alfven/Alfven_py/output'
 # folders containing positions, velocities, and energies
-# note: each time moment is a separate .hdf5 file
+# note: each time moment is a separate .h5 file
 dir_x      = dir_output+'/x'
 dir_v      = dir_output+'/v'
 dir_Ekin   = dir_output+'/Ekin'
