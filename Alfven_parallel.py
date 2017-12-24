@@ -238,8 +238,8 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
     """
     # parallelise integration by splitting particles into groups
     comm = mpi.COMM_WORLD
+    comm.Barrier()
     mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size()
-
 
     # initializations
     tt  = np.empty(nsteps/nsample+2)
@@ -252,9 +252,10 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
 
     if mpi_rank==0:
         # save initial data
-        x_h5f    = h5py.File(dir_x+'/x%d.h5'%(0)      , 'w')
-        v_h5f    = h5py.File(dir_v+'/v%d.h5'%(0)      , 'w')
-        Ekin_h5f = h5py.File(dir_Ekin+'/Ekin%d.h5'%(0), 'w')
+        rep = '0'*len(str(nsteps/nsample+2))
+        x_h5f    = h5py.File(dir_x+'/x0%s0.h5'%(rep)      , 'w')
+        v_h5f    = h5py.File(dir_v+'/v0%s0.h5'%(rep)      , 'w')
+        Ekin_h5f = h5py.File(dir_Ekin+'/Ekin0%s0.h5'%(rep), 'w')
         x_h5f.create_dataset('data', data=xt[0])
         v_h5f.create_dataset('data', data=vt[0])
         Ekin_h5f.create_dataset('data', data=Ekt[0])
@@ -287,9 +288,10 @@ def particle_integration(Np, nsteps, nsample, nprint, dt, x, v, E, Ekin=Ekin, st
                 Ekt[isample] = np.copy(Ekin(v))
 
                 # save data
-                x_h5f    = h5py.File(dir_x+'/x%d.h5'%(isample)      , 'w')
-                v_h5f    = h5py.File(dir_v+'/v%d.h5'%(isample)      , 'w')
-                Ekin_h5f = h5py.File(dir_Ekin+'/Ekin%d.h5'%(isample), 'w')
+                rep = '0'*(len(str(nsteps/nsample+2))-len(str(isample)))
+                x_h5f    = h5py.File(dir_x+'/x0%s%d0.h5'%(rep,isample)      , 'w')
+                v_h5f    = h5py.File(dir_v+'/v0%s%d0.h5'%(rep,isample)      , 'w')
+                Ekin_h5f = h5py.File(dir_Ekin+'/Ekin0%s%d0.h5'%(rep,isample), 'w')
                 x_h5f.create_dataset('data', data=xt[isample])
                 v_h5f.create_dataset('data', data=vt[isample])
                 Ekin_h5f.create_dataset('data', data=Ekt[isample])
@@ -347,28 +349,29 @@ comm = mpi.COMM_WORLD
 mpi_rank, mpi_size = comm.Get_rank(), comm.Get_size() 
 
 """Initialize save files"""
-if mpi_rank==0:
-    dir_output = '/home/georgez/ownCloud/Projects/Alfven/Alfven_py/output'
-    dir_x      = dir_output+'/x'
-    dir_v      = dir_output+'/v'
-    dir_Ekin   = dir_output+'/Ekin'
+dir_output = '/home/georgez/ownCloud/Projects/Alfven/Alfven_py/output'
+dir_x      = dir_output+'/x'
+dir_v      = dir_output+'/v'
+dir_Ekin   = dir_output+'/Ekin'
 
+if mpi_rank==0:
     if not os.path.exists(dir_output):
         os.makedirs(dir_output)
         os.makedirs(dir_x)
         os.makedirs(dir_v)
         os.makedirs(dir_Ekin)
 
-"""Initialize particles"""
-Np = 5                                         # number of the Np particles
-x_init, v_init, Ekin_init = particle_init(Np)  # intital positions, velocities, and energies 
-
-"""Integrate equations of motion"""
+"""Integration parameters"""
+Np = 5                        # number of the Np particles
 t = 0.; dt = 5.e-4;           # start time and time step in cose units
 tmax = 1.e6 * dt              # end time in code units
 nsteps = np.int(tmax/dt)-1    # number of time steps
 nsample = 100; nprint = 1e5   # dump results every nsample and print every nprint
 
+"""Initialize particles"""
+x_init, v_init, Ekin_init = particle_init(Np)  # intital positions, velocities, and energies 
+
+"""Integrate equations of motion"""
 t1 = time() # start clock time
 ###----------------------------------------------- Call solver ---------------------------------------###
 tout, xout, vout, Eout = particle_integration(Np, nsteps, nsample, nprint, dt, x_init, v_init, Ekin_init)
